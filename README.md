@@ -1,5 +1,6 @@
-# HikikakuKunSheets
-floodgateの棋譜を戦型別に集計します（戦型付与は柿木将棋を使いました）
+# 引き角くんシート(HikikakuKunSheets)について
+
+floodgateの棋譜を戦型別に集計したExcelシートです（戦型付与は柿木将棋を使いました）
 
 # 使い方
 
