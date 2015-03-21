@@ -3,9 +3,11 @@
 
 import os
 import os.path
-import xlwt
 import codecs
 import re
+from openpyxl import Workbook
+from openpyxl.cell import get_column_letter
+import datetime
 
 def retrieveFiles(directly):
     newFiles = []
@@ -74,12 +76,16 @@ def calcSenkei(csa,kif):
         kf.close()
         #print li
         kifu = []
-
+        broken = False
         for el in li:
-            m = date.match(el)
-            if m:
-                #print u'日時='.encode('utf-8') + repr(m.group(1,2,3,4,5,6))
-                kifu = list(m.group(1,2,3,4,5,6))
+            if el.startswith(u'開'):
+                m = date.match(el)
+                if m:
+                    #print u'日時='.encode('utf-8') + repr(m.group(1,2,3,4,5,6))
+                    kifu = list(m.group(1,2,3,4,5,6))
+                else:
+                    kifu = list(2014,1,1,0,0,0) # dummy data (broken file...)
+                    broken = True
 
             m = senkei.match(el)
             if m:
@@ -101,7 +107,12 @@ def calcSenkei(csa,kif):
             if m:
                 #print u'後手='.encode('utf-8') + m.group(1).encode('utf-8')
                 gote_str = m.group(1)[:]
-        
+
+        if broken:
+            print csafile + ' is ignored(broken file)!!!!!!!!!!!!!!!!!!!!!!!!!!!'
+            num -= 1
+            continue
+
         if senkei_str == u'戦型データなし':
             senkei_table[u'合計'] += 1
             ge = senkei_table.get(senkei_str,u'えらー')
@@ -184,38 +195,33 @@ def calcSenkei(csa,kif):
                 kifu += [u'']
                 kifu += [u'不明']
 
-        kifu += [csafile[2:]]
-        kifu += [u'=HYPERLINK(O'+ (u'%d' % num) + ')']
+        kifu += [csafile[2:]]                           # J
+        kifu += [u'=HYPERLINK(J'+ (u'%d' % num) + ')']  # K
+        kifu += [u'=CELL("filename")']                  # L
+        unum = (u'%d' % num)
+        kifu += [u'=CONCATENATE(LEFT(L'+unum+u',FIND("★",SUBSTITUTE(L'+unum+u',"/","★",LEN(L'+unum+u')-LEN(SUBSTITUTE(L'+unum+u',"/",""))),1)-1),"/",J'+unum+u')']                   # M
+        kifu += [u'=HYPERLINK(RIGHT(M'+unum+u',LEN(M'+unum+u')-1))'] # N
 
-
-        kifu_t = u','.join(kifu)
+        # kifu_t = u','.join(kifu)
         # print kifu_t.encode('utf-8')
         # print 'analyze:' + str(num) + ':' + csafile
         record += [kifu[:]]
 
     return record, senkei_table
 
-def writeExcel(record, dest_filename):
-    workbook = xlwt.Workbook() 
-    sheet = workbook.add_sheet("SENKEI")
+def writeRow(ws1, rowIdx, reco):
+    col = unicode(get_column_letter(1))
+    row = unicode(str(rowIdx))
+    cellName = u'%s%s' % (col,row)
+    try:
+        ws1[cellName] = datetime.datetime(int(reco[0]),int(reco[1]),int(reco[2]),int(reco[3]),int(reco[4]),int(reco[5]))
+    except:
+        print reco[0:5]
 
-    row = 0
-    col = 0
-    for x in [u'年',u'月',u'日',u'時',u'分',u'秒',u'先手',u'後手',u'戦型',u'手数',u'勝者(先後)',u'勝者',u'敗者',u'結果',u'棋譜ファイル',u'リンク']:
-        sheet.write(row, col, x) # A-P
-        col += 1
-
-    row = 1
-    for re in record:
-        for i in range(0,15):
-            sheet.write(row, i, re[i]) # A-O
-        sheet.write(row, 15, xlwt.Formula('HYPERLINK(O'+str(row+1)+')'))
-        print row
-        row += 1
-
-    workbook.save(dest_filename)
-
-from openpyxl import Workbook
+    for i in range(6,len(reco)):
+        col2 = unicode(get_column_letter(i+1-5))
+        cellName = u'%s%s' % (col2,row)
+        ws1[cellName] = reco[i]
 
 def writeExcelXML(record, dest_filename):
     wb = Workbook()
@@ -223,11 +229,11 @@ def writeExcelXML(record, dest_filename):
     ws1 = wb.active
     ws1.title = u"戦型一覧表"
 
-    ws1.append([u'年',u'月',u'日',u'時',u'分',u'秒',u'先手',u'後手',u'戦型',u'手数',u'勝者(先後)',u'勝者',u'敗者',u'結果',u'棋譜ファイル',u'リンク'])
+    ws1.append([u'試合開始日時',u'先手',u'後手',u'戦型',u'手数',u'勝者(先後)',u'勝者',u'敗者',u'結果',u'棋譜ファイル',u'リンク(Excel)',u'ファイルパス1',u'ファイルパス2',u'リンク(LibreOffice)'])
 
     for row in range(2, len(record)+2):
-        ws1.append(record[row-2])
-        print row
+        writeRow(ws1, row, record[row-2])
+        print row-1
 
     wb.save(filename = dest_filename)
     print "file=%s: %d records are saved(^^)." % (dest_filename,len(record))
@@ -241,8 +247,6 @@ if __name__ == '__main__':
         print sys.argv[1]
         csa, kif = retrieveFiles(".")
         record,senkei = calcSenkei(csa,kif)
-        #writeExcel(record,"foobar.xls")
-        #writeExcelXML(record,"HikikakuKun2013.xlsx")
         writeExcelXML(record,sys.argv[1])
         for x in senkei.keys():
             print "%s: %d" % (x.encode('utf-8'),senkei[x])
